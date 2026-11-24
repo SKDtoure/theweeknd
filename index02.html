@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shake – Weeknd</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { height: 100%; margin: 0; background: #151515; overflow: hidden; }
+  body { display: grid; place-items: center; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+  .stage {
+    --ar: 1;
+    position: relative;
+    width: min(100vw, calc(100dvh * var(--ar)));
+    aspect-ratio: var(--ar);
+    overflow: hidden;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+  .layer {
+    position: absolute;
+    left: 0; top: 0; width: 100%; height: 100%;
+    object-fit: fill;
+    will-change: transform;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+
+  /* eye layers: a static clipped window (keeps each eye apart) with the eye artwork sliding inside it */
+  .eyewrap { overflow: visible; }
+  .eyewrap > img {
+    position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+    will-change: transform; pointer-events: none; user-select: none; -webkit-user-drag: none;
+  }
+
+  .ui {
+    position: absolute; left: 0; right: 0; bottom: max(16px, env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    pointer-events: none;
+  }
+  button#enable {
+    pointer-events: auto;
+    font-weight: 600; font-size: 15px; line-height: 1; font-family: inherit;
+    padding: 12px 20px; border-radius: 999px; border: 0;
+    background: #f2f2f2; color: #151515; cursor: pointer;
+  }
+  button#enable:focus-visible { outline: 3px solid #7fb4ff; outline-offset: 3px; }
+  .hint {
+    font-size: 13px; color: #fff; background: rgba(0,0,0,.55);
+    padding: 6px 12px; border-radius: 999px;
+    transition: opacity .6s ease;
+  }
+  .hidden { display: none !important; }
+  .fade { opacity: 0; }
+
+  /* ---- Tour sheet (long press) ---- */
+  .sheet {
+    position: fixed; left: 50%; bottom: 0; z-index: 20;
+    width: min(100vw, 520px); max-height: 80dvh; overflow: auto; overscroll-behavior: contain;
+    box-sizing: border-box; padding: 22px 20px max(22px, env(safe-area-inset-bottom));
+    background: rgba(18, 18, 20, .93);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    border-top: 2px solid #e0445a; border-radius: 20px 20px 0 0;
+    color: #f1eded;
+    transform: translate(-50%, 105%);
+    transition: transform .45s cubic-bezier(.2,.8,.2,1);
+    box-shadow: 0 -10px 40px rgba(224, 68, 90, .18);
+  }
+  .sheet.open { transform: translate(-50%, 0); }
+  .sheet .close {
+    position: absolute; top: 10px; right: 12px; width: 36px; height: 36px;
+    border: 0; border-radius: 50%; background: rgba(255,255,255,.1); color: #fff;
+    font-size: 20px; line-height: 1; cursor: pointer;
+  }
+  .sheet .close:focus-visible { outline: 3px solid #7fb4ff; outline-offset: 2px; }
+  .kicker { font-size: 12px; letter-spacing: .2em; color: #e0445a; text-transform: uppercase; }
+  .sheet h2 { margin: 6px 40px 0 0; font-size: 22px; font-weight: 700; line-height: 1.2; }
+  .sub { font-size: 14px; color: #b9aeb0; margin-top: 2px; }
+  .banner { margin-top: 14px; padding: 10px 12px; border-radius: 12px; font-size: 14px; line-height: 1.4;
+    background: rgba(224, 68, 90, .12); border: 1px solid rgba(224, 68, 90, .4); }
+  .banner b { color: #ff8da0; }
+  .legs { margin-top: 8px; }
+  .legs h3 { margin: 18px 0 6px; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: #ff8da0; font-weight: 600; }
+  .stop { display: grid; grid-template-columns: 112px 1fr; gap: 4px 12px; padding: 10px 0; border-top: 1px solid rgba(255,255,255,.09); }
+  .stop .d { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stop .c { font-size: 15px; font-weight: 600; }
+  .stop .v { grid-column: 2; font-size: 12px; color: #b9aeb0; margin-top: -2px; }
+  .stop.done { opacity: .45; }
+  .stop.next { opacity: 1; border-left: 3px solid #ff9a2e; padding-left: 9px; margin-left: -12px; background: rgba(255,154,46,.1); }
+  .stop.next .d::after { content: " \00B7  next"; color: #ffb35c; font-weight: 600; font-size: 12px; }
+  .note { margin: 16px 0 0; font-size: 11px; line-height: 1.5; color: #8d8386; }
+
+  /* tabs + clickable stops in the schedule */
+  .tabs { display: flex; gap: 6px; margin-top: 14px; }
+  .tabs button { flex: 1; font: inherit; font-size: 13px; padding: 9px 8px; border-radius: 999px; border: 1px solid rgba(224,68,90,.5); background: transparent; color: #e7dcde; cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: #e0445a; border-color: #e0445a; color: #fff; font-weight: 700; }
+  .tabs button:focus-visible, button.stop:focus-visible { outline: 3px solid #7fb4ff; outline-offset: 2px; }
+  button.stop { grid-template-columns: 112px 1fr auto; width: 100%; border: 0; border-top: 1px solid rgba(255,255,255,.09); background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+  button.stop:hover { background: rgba(224,68,90,.08); }
+  .stop .go { grid-column: 3; grid-row: 1 / span 2; align-self: center; font-size: 12px; font-weight: 700; padding: 7px 12px; border-radius: 999px; background: #e0445a; color: #fff; white-space: nowrap; }
+
+  /* ---- Encore ticket mockup ---- */
+  .booking {
+    position: fixed; inset: 0; z-index: 30; overflow: auto; overscroll-behavior: contain; touch-action: manipulation;
+    background: linear-gradient(180deg, #1a1218, #0d0b0e); color: #f1eded;
+    visibility: hidden; opacity: 0; transform: translateY(24px);
+    transition: opacity .3s, transform .3s, visibility 0s .3s;
+  }
+  .booking.open { visibility: visible; opacity: 1; transform: none; transition: opacity .3s, transform .3s; }
+  .bk-wrap { max-width: 520px; min-height: 100%; margin: 0 auto; display: flex; flex-direction: column; }
+  .bk-head { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 10px; padding: max(12px, env(safe-area-inset-top)) 14px 12px; background: rgba(18, 16, 20, .97); border-bottom: 1px solid rgba(224,68,90,.35); }
+  .bk-head .ttl { flex: 1; min-width: 0; }
+  .bk-head .ttl div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bk-head .kicker { font-size: 11px; }
+  #bkVenue { font-size: 16px; font-weight: 700; }
+  #bkWhen { font-size: 13px; color: #ffb35c; }
+  .bk-round { flex: 0 0 auto; width: 40px; height: 40px; border: 0; border-radius: 50%; background: rgba(255,255,255,.1); color: #fff; font-size: 20px; line-height: 1; cursor: pointer; }
+  .bk-round[hidden] { display: none; }
+  .bk-round:focus-visible, .bk-primary:focus-visible, .seat:focus-visible, .bk-step-btn:focus-visible, .bk-opt:focus-visible, .bk-ghost:focus-visible, .zone:focus-visible { outline: 3px solid #7fb4ff; outline-offset: 2px; }
+  .bk-steps { display: flex; gap: 6px; padding: 12px 16px 0; margin: 0; list-style: none; }
+  .bk-steps li { flex: 1; text-align: center; font-size: 12px; color: #8d8386; padding-bottom: 6px; border-bottom: 3px solid rgba(255,255,255,.12); }
+  .bk-steps li.on { color: #fff; border-color: #e0445a; font-weight: 700; }
+  .bk-steps li.done { color: #ffb35c; border-color: #ff9a2e; }
+  .bk-body { padding: 18px 16px 24px; flex: 1; }
+  .bk-h { margin: 18px 0 8px; font-size: 18px; }
+  .bk-h:first-child { margin-top: 0; }
+  .bk-msg { margin-bottom: 14px; padding: 10px 12px; border-radius: 12px; font-size: 13px; background: rgba(255,154,46,.14); border: 1px solid rgba(255,154,46,.5); }
+  .bk-hold { margin-bottom: 14px; padding: 8px 12px; border-radius: 12px; font-size: 13px; background: rgba(224,68,90,.12); border: 1px solid rgba(224,68,90,.4); font-variant-numeric: tabular-nums; }
+  .bk-hold.low { background: rgba(255,154,46,.14); border-color: rgba(255,154,46,.6); }
+  .bk-demo { margin: 0 0 14px; padding: 10px 12px; border-radius: 12px; font-size: 12px; line-height: 1.5; color: #e7dcde; background: rgba(255,255,255,.06); border: 1px dashed rgba(255,255,255,.3); }
+  .bk-foot { position: sticky; bottom: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px max(14px, env(safe-area-inset-bottom)); background: rgba(18, 16, 20, .97); border-top: 1px solid rgba(224,68,90,.35); }
+  .bk-sum b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+  .bk-sum span { font-size: 12px; color: #b9aeb0; }
+  .bk-primary { margin-left: auto; border: 0; border-radius: 999px; padding: 13px 22px; font: inherit; font-size: 16px; font-weight: 700; background: #ff9a2e; color: #1a0f00; cursor: pointer; }
+  .bk-primary:disabled { opacity: .35; cursor: not-allowed; }
+  .bk-opt { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit; color: inherit; padding: 12px; margin-top: 8px; border-radius: 12px; border: 1px solid rgba(255,255,255,.2); background: transparent; cursor: pointer; }
+  .bk-opt:disabled { opacity: .35; cursor: not-allowed; }
+  .bk-opt .dot { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255,255,255,.5); }
+  .bk-opt .box { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 4px; border: 2px solid rgba(255,255,255,.5); }
+  .bk-opt[aria-checked="true"] { border-color: #e0445a; background: rgba(224,68,90,.12); }
+  .bk-opt[aria-checked="true"] .dot { border-color: #e0445a; background: radial-gradient(circle, #e0445a 45%, transparent 50%); }
+  .bk-opt[aria-checked="true"] .box { border-color: #e0445a; background: #e0445a; }
+  .bk-opt .main { flex: 1; min-width: 0; }
+  .bk-opt small { display: block; color: #b9aeb0; font-size: 12px; }
+  .bk-opt .amt { font-variant-numeric: tabular-nums; color: #ffb35c; font-size: 14px; }
+  .bk-stepper { display: flex; align-items: center; justify-content: center; gap: 22px; padding: 6px 0; }
+  .bk-step-btn { width: 48px; height: 48px; border-radius: 50%; border: 1px solid rgba(224,68,90,.7); background: rgba(224,68,90,.12); color: #fff; font-size: 24px; line-height: 1; cursor: pointer; }
+  .bk-step-btn:disabled { opacity: .3; cursor: not-allowed; }
+  .bk-count { min-width: 34px; text-align: center; font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .bk-ghost { font: inherit; font-size: 13px; padding: 9px 14px; border-radius: 999px; border: 1px solid rgba(224,68,90,.6); background: transparent; color: #e7dcde; cursor: pointer; }
+  /* venue map */
+  .venuemap { width: 100%; height: auto; display: block; margin-top: 4px; }
+  .zone { cursor: pointer; }
+  .zone rect { stroke: rgba(255,255,255,.35); stroke-width: 1; transition: filter .15s; }
+  .zone text { fill: #fff; font-size: 9px; font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+  .zone.pit rect { fill: #e0445a; } .zone.floor rect { fill: #b73a63; } .zone.lower rect { fill: #84305f; } .zone.upper rect { fill: #4e3162; }
+  .zone:hover rect { filter: brightness(1.25); }
+  .zone.sel rect { stroke: #ff9a2e; stroke-width: 3; filter: brightness(1.3); }
+  .zone.na { cursor: not-allowed; opacity: .3; }
+  .zone.na:hover rect { filter: none; }
+  .zone.na rect { fill: #3a3338 !important; }
+  .stagebox { fill: #f1eded; opacity: .9; }
+  .stagelbl { fill: #1a1218; font-size: 10px; font-weight: 800; letter-spacing: .2em; text-anchor: middle; dominant-baseline: central; }
+  .tierkey { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; font-size: 12px; color: #b9aeb0; }
+  .tierkey i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .panel { margin-top: 14px; padding: 14px; border-radius: 14px; background: rgba(255,255,255,.05); border: 1px solid rgba(224,68,90,.35); min-height: 70px; }
+  .panel .pt { font-size: 17px; font-weight: 700; }
+  .panel .ps { font-size: 13px; color: #b9aeb0; margin-top: 2px; }
+  .panel .pp { font-size: 15px; color: #ffb35c; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .panel .low { color: #ff9a2e; font-weight: 700; }
+  .seatgrid { display: grid; gap: 4px; margin-top: 12px; }
+  .seat { width: 100%; max-width: 24px; aspect-ratio: 1 / 1; justify-self: center; padding: 0; position: relative; border-radius: 5px 5px 3px 3px; border: 1.5px solid rgba(255,140,165,.8); background: rgba(224,68,90,.15); color: #1a0f00; font-size: 10px; font-weight: 700; cursor: pointer; }
+  .seat[aria-pressed="true"] { background: #ff9a2e; border-color: #ffb35c; }
+  .seat[aria-pressed="true"]::after { content: "\2713"; }
+  .seat:disabled { border-color: rgba(255,255,255,.12); background: rgba(255,255,255,.06); cursor: not-allowed; }
+  .seat:disabled::after { content: "\00D7"; color: rgba(255,255,255,.35); }
+  .bk-picked { margin-top: 10px; text-align: center; font-size: 14px; font-weight: 600; color: #ffb35c; min-height: 1.4em; }
+  .rowhint { text-align: center; font-size: 11px; letter-spacing: .2em; color: #8d8386; margin-top: 12px; }
+  /* review + ticket */
+  .bk-card { padding: 14px; border-radius: 14px; background: rgba(255,255,255,.05); border: 1px solid rgba(224,68,90,.3); margin-bottom: 14px; }
+  .bk-card h4 { margin: 0 0 8px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: #ff8da0; font-weight: 600; }
+  .bk-kv { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 14px; }
+  .bk-kv span:first-child { color: #b9aeb0; }
+  .bk-kv span:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .bk-kv.total { margin-top: 6px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.15); font-size: 17px; font-weight: 700; }
+  .bk-kv.total span:first-child { color: #fff; }
+  .bk-ok { text-align: center; font-size: 20px; font-weight: 700; color: #7be0a5; margin-bottom: 4px; }
+  .bk-okja { text-align: center; font-size: 13px; color: #b9aeb0; margin-bottom: 16px; }
+  .bk-ticket { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; padding: 16px; border-radius: 16px; background: linear-gradient(135deg, #3a1522, #1a1218); border: 1px solid rgba(224,68,90,.6); box-shadow: 0 0 30px rgba(224,68,90,.2); }
+  .bk-ticket .mv { font-size: 18px; font-weight: 800; line-height: 1.2; }
+  .bk-ticket .mvja { font-size: 13px; color: #b9aeb0; margin-bottom: 10px; }
+  .bk-ticket svg { width: 104px; height: 104px; border-radius: 8px; background: #fff; }
+  .bk-ticket .code { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; padding-top: 12px; border-top: 1px dashed rgba(255,255,255,.3); font-size: 12px; color: #b9aeb0; }
+  .bk-ticket .code b { font-size: 20px; letter-spacing: .12em; color: #fff; }
+  @media (prefers-reduced-motion: reduce) { .booking, .booking.open { transition: none; } }
+</style>
+</head>
+<body>
+
+<main class="stage" id="stage" aria-label="Animated portrait with a bouncing spotlight. Shake your phone or your mouse to change the face and speed up the spotlight. Tilt your phone to steer the spotlight and move the eyes. Tap to play or pause the music, double-tap to reset it. Press and hold to see the After Hours Til Dawn Tour schedule and the 2027 encore ticket mockup.">
+  <div class="ui">
+    <button id="enable" class="hidden" type="button">Tap to enable shake &amp; tilt</button>
+    <div id="hint" class="hint hidden"></div>
+  </div>
+</main>
+
+<section class="sheet" id="sheet" role="dialog" aria-label="After Hours Til Dawn Tour schedule" aria-hidden="true">
+  <button class="close" id="sheetClose" type="button" aria-label="Close tour schedule">&times;</button>
+  <div class="kicker">The Weeknd</div>
+  <h2>After Hours Til Dawn Tour</h2>
+  <div class="sub" id="sheetSub"></div>
+  <div class="tabs" id="tabs" role="tablist" aria-label="Tour year">
+    <button type="button" role="tab" data-tab="encore">Encore 2027 (concept)</button>
+    <button type="button" role="tab" data-tab="y2026">2026 tour</button>
+  </div>
+  <div class="banner" id="banner"></div>
+  <div class="legs" id="legs"></div>
+  <p class="note" id="sheetNote"></p>
+</section>
+
+<section class="booking" id="booking" role="dialog" aria-modal="true" aria-label="Encore tour tickets (mockup)" aria-hidden="true">
+  <div class="bk-wrap">
+    <header class="bk-head">
+      <button class="bk-round" id="bkBack" type="button" aria-label="Back">&larr;</button>
+      <div class="ttl">
+        <div class="kicker">The Weeknd &middot; Encore 2027 concept</div>
+        <div id="bkVenue"></div>
+        <div id="bkWhen"></div>
+      </div>
+      <button class="bk-round" id="bkClose" type="button" aria-label="Close ticket booking">&times;</button>
+    </header>
+    <ol class="bk-steps" id="bkSteps"></ol>
+    <div class="bk-body" id="bkBody"></div>
+    <footer class="bk-foot" id="bkFoot">
+      <div class="bk-sum"><b id="bkSumTotal"></b><span id="bkSumInfo"></span></div>
+      <button class="bk-primary" id="bkNext" type="button"></button>
+    </footer>
+  </div>
+</section>
+
+<script>
+/* ======================= EDIT THESE ======================= */
+
+/*
+  LAYERS: list from BACK to FRONT (the order of lines = stacking order).
+
+  id       a short name the animation script uses
+  depth    0 = barely moves, 1+ = moves the most (tilt / mouse parallax)
+  spot     true = the script bounces this layer around inside the background (see SPOTLIGHT below)
+  faces    true = these layers are the face frames. Only ONE shows at a time; a shake switches to the next.
+  origin   pivot point as "x% y%" of the whole canvas (used for the little pop when the face changes)
+*/
+const FACE = { depth: 0.60, origin: "50% 60%", faces: true };
+
+// ---- Eyes ----
+// Each entry gives one face its eye artwork. Both eyes are in one PNG, so the page splits it into a left-eye
+// window and a right-eye window and slides each one separately, so neither can leave its own eye.
+//   face   which face it belongs to (0 = face01, 1 = face02, 2 = face03). Faces without an entry show no moving eyes.
+//   split  where the PNG divides between the two eyes (fraction of image width, anywhere in the gap between them)
+//   left / right   how far that eye may slide from where you drew it (your drawn position = 0), as a fraction of image width
+//                  (negative = toward the left of the image, positive = toward the right). This is the "ocular space":
+//                  the eye can never go past these numbers, whatever the tilt or glance asks for.
+const EYE_SETS = [
+  { face: 0, src: "layer4-weeknd-eye01.png", split: 0.342,
+    left:  { min: -0.0071, max: 0.0171 },
+    right: { min: -0.0086, max: 0.0157 } }
+  // When you have eyes for the other faces, add them, for example:
+  // { face: 1, src: "layer4-weeknd-eye02.png", split: 0.342, left: { min: -0.03, max: 0.003 }, right: { min: -0.04, max: 0.004 } },
+];
+const EYE_SWING = 0.0114;       // how far the eyes travel each way from the drawn (centred) position, as a fraction of image width.
+                                // The range limits above still apply, so a bigger swing can never push an eye out of its socket.
+const EYE_IDLE_HOLD = [1.4, 3.6];   // seconds the eyes hold a look before glancing the other way (min, max)
+const EYE_IDLE_CENTER_CHANCE = 0.25;// chance a glance returns to the middle instead of going to the other side
+const EYE_FOLLOW = 14;          // how quickly the eyes catch up to where they're looking (higher = snappier)
+const EYE_TILT_GAIN = 1.5;      // how much of the range a tilt uses (1.5 = reaches the edge at about two thirds of TILT_RANGE)
+const EYE_TILT_DEADZONE = 0.08; // sideways tilt below this still counts as neutral (eyes keep glancing on their own)
+const EYE_TILT_BLEND = 0.15;    // how far past the deadzone before tilt fully takes over
+const EYE_DIR = 1;              // set to -1 if the eyes look the opposite way to your tilt
+
+// Builds the two eye layers (left window, right window) for one face
+function eyeLayers(set) {
+  const mk = (side, range, clip) => ({
+    id: "eye" + set.face + side, src: set.src, depth: FACE.depth, origin: FACE.origin,
+    eye: { face: set.face, clip, min: range.min, max: range.max }
+  });
+  return [
+    mk("L", set.left,  "inset(0 " + ((1 - set.split) * 100) + "% 0 0)"),
+    mk("R", set.right, "inset(0 0 0 " + (set.split * 100) + "%)")
+  ];
+}
+
+const LAYERS = [
+  { id: "background", src: "layer1-weeknd-background.png", depth: 0.15 },
+  // Spotlight: bounces around inside the background's coloured area on its own.
+  // Its depth matches the background's so it stays inside the edges while you tilt. (spot: true = script moves it)
+  { id: "spot",       src: "layer2-weeknd-spotlight.png",  depth: 0.15, spot: true },
+
+  // Face frames: shake to cycle 01 -> 02 -> 03 -> 01
+  { id: "face1", src: "layer3-weeknd-face01.png", ...FACE },
+  { id: "face2", src: "layer3-weeknd-face02.png", ...FACE },
+  { id: "face3", src: "layer3-weeknd-face03.png", ...FACE },
+
+  // Eyes sit on top of their face and move with it
+  ...EYE_SETS.flatMap(eyeLayers)
+];
+
+// ---- Movement feel (tilt on phone, pointer position on desktop) ----
+const MAX_SHIFT = 0.03;      // front-layer travel as a fraction of image width
+const TILT_RANGE = 20;       // degrees of phone tilt for full movement
+const SMOOTHING = 0.08;      // 0.04 = floaty, 0.15 = snappy
+const DIRECTION = 1;         // set to -1 if the movement feels backwards
+
+// ---- Spotlight ----
+// Units are "image widths per second": 0.1 = crosses a tenth of the image width each second.
+const SPOT_IDLE_SPEED = 0.08;   // drifting speed while idle
+const SPOT_SHAKE_MULT = 4;      // how many times faster it gets at the peak of a shake
+const SPOT_SHAKE_DECAY = 2.0;   // seconds for the shake speed-up to die back down
+const SPOT_SPEED_EASE = 1.5;    // how quickly it speeds up / slows to its target (higher = snappier)
+const SPOT_TILT_ACCEL = 1.0;    // how strongly tilt pushes it (higher = more responsive)
+const SPOT_TILT_MAX = 0.9;      // top speed while tilted
+const SPOT_TILT_DEADZONE = 0.10;// tilt below this (0..1 of TILT_RANGE) counts as neutral
+const SPOT_TILT_DIR = 1;        // set to -1 if it travels the opposite way to your tilt
+const SPOT_TILT_BOUNCE = 0.45;  // how much speed is kept when it hits a wall while tilted (1 = full bounce)
+// Fallback if the page can't read the images (e.g. opened straight from disk). Normally these are detected automatically.
+// All values are fractions of the image width (x) or height (y). left/right/top/bottom = the coloured area; cx/cy/rx/ry = the spotlight circle.
+const SPOT_FALLBACK = { left: 0.0445, right: 0.9558, top: 0.023, bottom: 0.8296, cx: 0.2667, cy: 0.6055, rx: 0.2069, ry: 0.1464 };
+
+// ---- Shake: phone ----
+const SHAKE_THRESHOLD = 22;  // how hard each jolt must be (lower = easier to trigger, higher = needs a harder shake)
+const SHAKE_SPIKES = 3;      // how many jolts within SHAKE_WINDOW count as a shake (stops accidental bumps)
+const SHAKE_WINDOW = 0.6;    // seconds
+
+// ---- Shake: mouse (wiggle the pointer quickly back and forth) ----
+const MOUSE_MIN_STROKE = 40; // pixels the pointer must travel in one direction to count as a stroke
+const MOUSE_STROKES = 4;     // how many back-and-forth strokes within MOUSE_WINDOW count as a shake
+const MOUSE_WINDOW = 0.8;    // seconds
+
+// ---- Music: tap to play, tap again to pause, double-tap to reset ----
+// One song per face: shaking to a new face switches to that face's song. Keep the MP3s in the same folder as this page.
+//   start   seconds into the song where it begins (e.g. 45 = start at 0:45)
+//   length  seconds to play from there (0 = play the whole song)
+//   fade    seconds of fade-out at the end of a clip (ignored when length is 0)
+// The file names must match exactly, including capitals, spaces and apostrophes.
+const TRACKS = [
+  { src: "The Weeknd - Moth To A Flame.mp3",              start: 0, length: 30, fade: 1.5 },   // face01
+  { src: "The Weeknd - Can\u2019t Feel My Face.mp3",        start: 0, length: 30, fade: 1.5 },   // face02
+  { src: "The Weeknd - Until We're Skin & Bones.mp3",     start: 0, length: 0 }                  // face03: plays in full
+];
+const AUDIO_LOOP = false;           // true = a song starts over by itself when it ends
+const AUDIO_VOLUME = 1;             // 0 to 1
+const DOUBLE_TAP_RESTARTS = false;  // false = double-tap rewinds and stays paused; true = rewinds and plays again
+const DOUBLE_TAP_RECENTERS = true;  // double-tap also re-centers the tilt (the old behaviour)
+const TAP_MAX_MOVE = 14;            // pixels a finger/mouse may move and still count as a tap
+const DOUBLE_TAP_TIME = 0.35;       // seconds between two taps to count as a double-tap
+
+// ---- Long press -> tour schedule ----
+const LONG_PRESS_TIME = 0.5;        // seconds you must hold before the schedule opens
+const SHEET_AUTOHIDE = 0;           // seconds until the schedule closes by itself (0 = stays until closed)
+
+// The tour stops. "nights" are the 2026 show dates (YYYY-MM-DD, compiled from Wikipedia's tour page, which lists the tour ending Nov 5, 2026).
+// "cc" is the local currency used for the sample ticket prices. The 2027 encore dates are worked out from these (see ENCORE_SHIFT_DAYS).
+const TOUR_LEGS = [
+  { name: "Latin America", stops: [
+    { id: "mex", city: "Mexico City, Mexico", venue: "Estadio GNP Seguros", cc: "MXN",
+      nights: ["2026-04-20", "2026-04-21", "2026-04-22"] },
+    { id: "rio", city: "Rio de Janeiro, Brazil", venue: "Est\u00E1dio Nilton Santos", cc: "BRL",
+      nights: ["2026-04-26"] },
+    { id: "sao", city: "S\u00E3o Paulo, Brazil", venue: "Est\u00E1dio MorumBIS", cc: "BRL",
+      nights: ["2026-04-30", "2026-05-01"] } ] },
+  { name: "Europe & UK", stops: [
+    { id: "man", city: "Manchester, England", venue: "Etihad Stadium", cc: "GBP",
+      nights: ["2026-06-11", "2026-06-12"] },
+    { id: "cph", city: "Copenhagen, Denmark", venue: "Parken Stadium", cc: "DKK",
+      nights: ["2026-06-19", "2026-06-20"] },
+    { id: "muc", city: "Munich, Germany", venue: "Allianz Arena", cc: "EUR",
+      nights: ["2026-06-25", "2026-06-26", "2026-06-27"] },
+    { id: "lil", city: "Lille, France", venue: "Stade Pierre-Mauroy", cc: "EUR",
+      nights: ["2026-07-03", "2026-07-04"] },
+    { id: "par", city: "Saint-Denis (Paris), France", venue: "Stade de France", cc: "EUR",
+      nights: ["2026-07-08", "2026-07-10", "2026-07-11", "2026-07-12"] },
+    { id: "ams", city: "Amsterdam, Netherlands", venue: "Johan Cruyff Arena", cc: "EUR",
+      nights: ["2026-07-16", "2026-07-17", "2026-07-18"] },
+    { id: "nce", city: "Nice, France", venue: "Allianz Riviera", cc: "EUR",
+      nights: ["2026-07-21", "2026-07-22"] },
+    { id: "mil", city: "Milan, Italy", venue: "San Siro", cc: "EUR",
+      nights: ["2026-07-24", "2026-07-25", "2026-07-26"] },
+    { id: "fra", city: "Frankfurt, Germany", venue: "Deutsche Bank Park", cc: "EUR",
+      nights: ["2026-07-30", "2026-07-31", "2026-08-01"] },
+    { id: "waw", city: "Warsaw, Poland", venue: "PGE Narodowy", cc: "PLN",
+      nights: ["2026-08-04", "2026-08-05"] },
+    { id: "sto", city: "Stockholm, Sweden", venue: "Strawberry Arena", cc: "SEK",
+      nights: ["2026-08-08", "2026-08-09", "2026-08-10"] },
+    { id: "lon", city: "London, England", venue: "Wembley Stadium", cc: "GBP",
+      nights: ["2026-08-14", "2026-08-15", "2026-08-16", "2026-08-18", "2026-08-19"] },
+    { id: "dub", city: "Dublin, Ireland", venue: "Croke Park", cc: "EUR",
+      nights: ["2026-08-22", "2026-08-23"] },
+    { id: "mad", city: "Madrid, Spain", venue: "Riyadh Air Metropolitano", cc: "EUR",
+      nights: ["2026-08-28", "2026-08-29", "2026-08-30"] },
+    { id: "bcn", city: "Barcelona, Spain", venue: "Estadi Ol\u00EDmpic Llu\u00EDs Companys", cc: "EUR",
+      nights: ["2026-09-01"] },
+    { id: "lis", city: "Lisbon, Portugal", venue: "Est\u00E1dio do Restelo", cc: "EUR",
+      nights: ["2026-09-05", "2026-09-06"] } ] },
+  { name: "Live in Asia", stops: [
+    { id: "tyo", city: "Tokyo (Tokorozawa), Japan", venue: "Belluna Dome", cc: "JPY",
+      nights: ["2026-09-19", "2026-09-20"] },
+    { id: "jkt", city: "Jakarta, Indonesia", venue: "Jakarta International Stadium", cc: "IDR",
+      nights: ["2026-09-26", "2026-09-27"] },
+    { id: "sin", city: "Singapore", venue: "National Stadium", cc: "SGD",
+      nights: ["2026-10-02", "2026-10-03"] },
+    { id: "sel", city: "Goyang (Seoul), South Korea", venue: "Goyang Stadium", cc: "KRW",
+      nights: ["2026-10-07", "2026-10-08"] },
+    { id: "bkk", city: "Bangkok, Thailand", venue: "Rajamangala Stadium", cc: "THB",
+      nights: ["2026-10-11", "2026-10-12", "2026-10-13"] },
+    { id: "hkg", city: "Hong Kong", venue: "Kai Tak Stadium", cc: "HKD",
+      nights: ["2026-10-24", "2026-10-25", "2026-10-30", "2026-10-31"] },
+    { id: "kul", city: "Kuala Lumpur, Malaysia", venue: "TM Stadium Nasional", cc: "MYR",
+      nights: ["2026-11-04", "2026-11-05"] } ] }
+];
+const TOUR_FINALE = "Kuala Lumpur \u00B7 Nov 5, 2026";   // shown in the banner once every stop has passed
+const TOUR_TIMEZONE = "Asia/Tokyo";                       // "today" is worked out in this time zone
+
+// ---- 2027 ENCORE CONCEPT: the same stadiums and countries, one more run ----
+// None of this is real: it is an imagined encore tour, and nothing is sold, charged or booked.
+const ENCORE_NAME = "After Hours Til Dawn: Encore 2027";
+const ENCORE_SHIFT_DAYS = 364;   // each 2027 date = the 2026 date + this many days (364 = exactly 52 weeks, so the weekdays match).
+                                 // A stop can also have its own  encore: ["2027-06-10", "2027-06-11"]  list to set the dates by hand.
+const DOORS_TIME = "17:30", SHOW_TIME = "20:00";   // sample times shown on the ticket
+const MAX_TICKETS = 6;           // per booking
+const BOOKING_FEE_RATE = 0.10;   // sample service fee on the tickets
+const HOLD_MINUTES = 10;         // how long chosen seats are "held" (countdown on the seat and review steps)
+const EXTRAS = [                 // optional add-ons on the review step (prices in US dollars, converted to each country's currency)
+  { id: "early",  en: "Early entry",         ja: "早期入場",       usd: 35, per: "ticket" },
+  { id: "poster", en: "Collectible poster",  ja: "ツアーポスター", usd: 25, per: "order" },
+  { id: "tee",    en: "Encore tour tee",     ja: "ツアーTシャツ",  usd: 55, per: "order" }
+];
+const PAYMENT_METHODS = [
+  { id: "card",    en: "Credit card",             ja: "クレジットカード" },
+  { id: "wallet",  en: "Apple Pay / Google Pay",  ja: "モバイルウォレット" },
+  { id: "konbini", en: "Convenience store",       ja: "コンビニ払い" }
+];
+// Sample exchange rates (per US dollar) used to show prices in each country's currency
+const FX = { USD: 1, MXN: 18, BRL: 5.5, GBP: 0.78, DKK: 6.9, EUR: 0.92, PLN: 4, SEK: 10.5, JPY: 150, IDR: 16000, SGD: 1.35, KRW: 1350, THB: 35, HKD: 7.8, MYR: 4.5 };
+/*
+  ZONES: the seating plan, the same generic stadium layout for every venue. Coordinates are on a 360 x 280 map.
+  tier   pit / floor (standing, no assigned seats) or lower / upper (reserved seats)
+  usd    sample price per ticket in US dollars
+  ga     true = standing area, no seat choice
+  rows, cols   size of the seat grid for reserved sections
+*/
+const ZONES = [
+  { id: "PIT", label: "Pit", tier: "pit",   usd: 220, ga: true, x: 105, y: 46,  w: 150, h: 40 },
+  { id: "FLA", label: "Floor A", tier: "floor", usd: 165, ga: true, x: 80,  y: 90,  w: 98,  h: 96 },
+  { id: "FLB", label: "Floor B", tier: "floor", usd: 165, ga: true, x: 182, y: 90,  w: 98,  h: 96 },
+  { id: "101", label: "Section 101", tier: "lower", usd: 155, rows: 8, cols: 12, x: 40,  y: 46,  w: 36, h: 46 },
+  { id: "102", label: "Section 102", tier: "lower", usd: 150, rows: 8, cols: 12, x: 40,  y: 96,  w: 36, h: 46 },
+  { id: "103", label: "Section 103", tier: "lower", usd: 135, rows: 8, cols: 12, x: 40,  y: 146, w: 36, h: 46 },
+  { id: "104", label: "Section 104", tier: "lower", usd: 155, rows: 8, cols: 12, x: 284, y: 46,  w: 36, h: 46 },
+  { id: "105", label: "Section 105", tier: "lower", usd: 150, rows: 8, cols: 12, x: 284, y: 96,  w: 36, h: 46 },
+  { id: "106", label: "Section 106", tier: "lower", usd: 135, rows: 8, cols: 12, x: 284, y: 146, w: 36, h: 46 },
+  { id: "107", label: "Section 107", tier: "lower", usd: 120, rows: 8, cols: 16, x: 74,  y: 196, w: 50, h: 34 },
+  { id: "108", label: "Section 108", tier: "lower", usd: 130, rows: 8, cols: 16, x: 128, y: 196, w: 50, h: 34 },
+  { id: "109", label: "Section 109", tier: "lower", usd: 130, rows: 8, cols: 16, x: 182, y: 196, w: 50, h: 34 },
+  { id: "110", label: "Section 110", tier: "lower", usd: 120, rows: 8, cols: 16, x: 236, y: 196, w: 50, h: 34 },
+  { id: "201", label: "Section 201", tier: "upper", usd: 85, rows: 10, cols: 14, x: 3,   y: 46,  w: 34, h: 70 },
+  { id: "202", label: "Section 202", tier: "upper", usd: 75, rows: 10, cols: 14, x: 3,   y: 120, w: 34, h: 70 },
+  { id: "203", label: "Section 203", tier: "upper", usd: 85, rows: 10, cols: 14, x: 323, y: 46,  w: 34, h: 70 },
+  { id: "204", label: "Section 204", tier: "upper", usd: 75, rows: 10, cols: 14, x: 323, y: 120, w: 34, h: 70 },
+  { id: "205", label: "Section 205", tier: "upper", usd: 60, rows: 10, cols: 14, x: 40,  y: 236, w: 52, h: 34 },
+  { id: "206", label: "Section 206", tier: "upper", usd: 65, rows: 10, cols: 14, x: 96,  y: 236, w: 52, h: 34 },
+  { id: "207", label: "Section 207", tier: "upper", usd: 70, rows: 10, cols: 14, x: 152, y: 236, w: 52, h: 34 },
+  { id: "208", label: "Section 208", tier: "upper", usd: 65, rows: 10, cols: 14, x: 208, y: 236, w: 52, h: 34 },
+  { id: "209", label: "Section 209", tier: "upper", usd: 60, rows: 10, cols: 14, x: 264, y: 236, w: 52, h: 34 }
+];
+const TIER_NAMES = { pit: "Pit (standing)", floor: "Floor (standing)", lower: "Lower bowl (reserved)", upper: "Upper bowl (reserved)" };
+const TIER_COLORS = { pit: "#e0445a", floor: "#b73a63", lower: "#84305f", upper: "#4e3162" };
+
+// ---- After a shake ----
+const SHAKE_COOLDOWN = 0.7;  // seconds before another shake can switch the face again
+const TAP_CYCLES = false;    // true = a tap/click also switches faces (handy if shaking doesn't work on your device)
+const POP_SCALE = 0.025;     // size of the little pop when the face changes (0 = none)
+const POP_TILT = 1.2;        // degrees of wobble in that pop
+const POP_TIME = 0.35;       // seconds the pop takes to settle
+
+/* ======================= CODE ======================= */
+
+const stage = document.getElementById("stage");
+const enableBtn = document.getElementById("enable");
+const hint = document.getElementById("hint");
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const TAU = Math.PI * 2;
+
+// Build the layers
+const layers = LAYERS.map((cfg, i) => {
+  const img = new Image();
+  img.alt = "";
+  img.draggable = false;
+  img.src = cfg.src;
+  let el = img, inner = null;
+  if (cfg.eye) {
+    // wrapper = fixed window that clips to one eye; inner image slides inside it
+    el = document.createElement("div");
+    el.className = "layer eyewrap";
+    el.style.clipPath = cfg.eye.clip;
+    el.appendChild(img);
+    inner = img;
+    el.style.opacity = 0;                 // shown only while its face is showing
+  } else {
+    img.className = "layer";
+    if (cfg.faces) img.style.opacity = 0;
+  }
+  el.style.transformOrigin = cfg.origin || "50% 50%";
+  stage.insertBefore(el, stage.querySelector(".ui"));
+  return { id: cfg.id, el, inner, eye: cfg.eye || null, depth: cfg.depth, faces: !!cfg.faces, spot: !!cfg.spot, shift: 0 };
+});
+const faceLayers = layers.filter(l => l.faces);
+const eyeLayerList = layers.filter(l => l.eye);
+
+// Match stage to the first layer's aspect ratio
+function setAspect() {
+  const first = layers[0].el;
+  if (first.naturalWidth) stage.style.setProperty("--ar", first.naturalWidth / first.naturalHeight);
+  sizeLayers();
+}
+layers[0].el.addEventListener("load", setAspect);
+if (layers[0].el.complete) setAspect();
+
+// Each layer is enlarged by the distance it can travel, so edges never show.
+function sizeLayers() {
+  const w = stage.clientWidth;
+  const h = stage.clientHeight;
+  layers.forEach(l => {
+    l.shift = l.depth * MAX_SHIFT * w;
+    const pad = l.shift;
+    l.el.style.left = -pad + "px";
+    l.el.style.top = -pad + "px";
+    l.el.style.width = (w + pad * 2) + "px";
+    l.el.style.height = (h + pad * 2) + "px";
+  });
+}
+new ResizeObserver(sizeLayers).observe(stage);
+
+/* ---------- Shared motion state ---------- */
+let tx = 0, ty = 0, cx = 0, cy = 0;     // tilt target and smoothed tilt (-1..1)
+let lastT = null;
+
+/* ---------- Shake energy (speeds up the spotlight) ---------- */
+let shakeEnergy = 0;        // 0..1, jumps up with each shake / jolt and decays back down
+function addShake(a) { shakeEnergy = Math.min(1, shakeEnergy + a); }
+
+/* ---------- Face switching ---------- */
+
+let faceIndex = 0;
+let popStart = -99;
+let lastSwitch = -99;       // performance.now()/1000 of the last switch
+
+function showFace(i) {
+  faceIndex = i;
+  faceLayers.forEach((l, k) => { l.el.style.opacity = k === i ? 1 : 0; });   // only one face visible at a time
+  eyeLayerList.forEach(l => { l.el.style.opacity = l.eye.face === i ? 1 : 0; });  // eyes only on their own face
+}
+showFace(0);
+
+function nextFace() {
+  const now = performance.now() / 1000;
+  if (now - lastSwitch < SHAKE_COOLDOWN) return;
+  lastSwitch = now;
+  addShake(0.5);
+  const wasPlaying = !audio.paused;           // keep the music going if it was on
+  showFace((faceIndex + 1) % faceLayers.length);
+  loadTrack(faceIndex, wasPlaying);           // each face has its own song
+  if (!reduceMotion) popStart = now;
+  if (navigator.vibrate) navigator.vibrate(15);
+}
+
+/* ---------- Spotlight: bounce around inside the coloured area ---------- */
+
+const bgImg = layers[0].el;
+const spotLayer = layers.find(l => l.spot);
+let spotReady = false;
+let spotRatio = 1;                         // image height / width, so everything can be measured in image widths
+let natX = 0, natY = 0;                    // where the circle sits in the artwork (its centre)
+let px = 0, py = 0, vx = 0, vy = 0;        // current centre and velocity
+let minX = 0, maxX = 0, minY = 0, maxY = 0;
+
+// Downscale an image and find the box around the pixels that pass a test
+function scanBox(img, test) {
+  const w = 300, h = Math.max(1, Math.round(w * img.naturalHeight / img.naturalWidth));
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, w, h);
+  const d = ctx.getImageData(0, 0, w, h).data;
+  let x0 = w, x1 = -1, y0 = h, y1 = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 4;
+    if (test(d[i], d[i + 1], d[i + 2], d[i + 3])) {
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+  }
+  return x1 < 0 ? null : { x0: x0 / w, x1: (x1 + 1) / w, y0: y0 / h, y1: (y1 + 1) / h };
+}
+
+function setupSpot() {
+  if (!spotLayer) return;
+  const spotImg = spotLayer.el;
+  spotRatio = bgImg.naturalHeight / bgImg.naturalWidth;
+  let g = SPOT_FALLBACK;
+  try {
+    const b = scanBox(bgImg, (r, gg, bl, a) => a > 128 && r + gg + bl < 740);   // coloured (not white / transparent) area
+    const sp = scanBox(spotImg, (r, gg, bl, a) => a > 128);                       // the spotlight circle
+    if (b && sp) g = { left: b.x0, right: b.x1, top: b.y0, bottom: b.y1,
+                       cx: (sp.x0 + sp.x1) / 2, cy: (sp.y0 + sp.y1) / 2, rx: (sp.x1 - sp.x0) / 2, ry: (sp.y1 - sp.y0) / 2 };
+  } catch (e) {
+    console.info("Couldn't read the images to measure them (normal when opened from disk). Using SPOT_FALLBACK.");
+  }
+  natX = g.cx; natY = g.cy * spotRatio;
+  minX = g.left + g.rx;   maxX = g.right - g.rx;
+  minY = (g.top + g.ry) * spotRatio; maxY = (g.bottom - g.ry) * spotRatio;
+  if (minX > maxX) minX = maxX = (minX + maxX) / 2;
+  if (minY > maxY) minY = maxY = (minY + maxY) / 2;
+  px = clamp(natX, minX, maxX); py = clamp(natY, minY, maxY);
+  const ang = (20 + Math.random() * 50) * Math.PI / 180;
+  vx = Math.cos(ang) * SPOT_IDLE_SPEED * (Math.random() < 0.5 ? -1 : 1);
+  vy = Math.sin(ang) * SPOT_IDLE_SPEED * (Math.random() < 0.5 ? -1 : 1);
+  spotReady = true;
+}
+
+// Start once the background and the spotlight have both loaded
+if (spotLayer) {
+  let pending = 2;
+  const done = () => { if (--pending === 0) setupSpot(); };
+  [bgImg, spotLayer.el].forEach(im => {
+    if (im.complete && im.naturalWidth) done(); else im.addEventListener("load", done, { once: true });
+  });
+}
+
+function updateSpot(dt) {
+  shakeEnergy *= Math.exp(-dt / SPOT_SHAKE_DECAY);
+  const target = SPOT_IDLE_SPEED * (1 + (SPOT_SHAKE_MULT - 1) * shakeEnergy);   // faster while shaken
+  const tilting = Math.hypot(cx, cy) > SPOT_TILT_DEADZONE;
+  let s = Math.hypot(vx, vy);
+
+  if (tilting) {
+    // tilt pushes it the way you're tilting, like a ball rolling on the screen
+    vx += cx * SPOT_TILT_ACCEL * SPOT_TILT_DIR * dt;
+    vy += cy * SPOT_TILT_ACCEL * SPOT_TILT_DIR * dt;
+    s = Math.hypot(vx, vy);
+    if (s > SPOT_TILT_MAX) { vx *= SPOT_TILT_MAX / s; vy *= SPOT_TILT_MAX / s; }
+  } else if (s < 1e-4) {
+    vx = target; vy = target * 0.6;
+  } else {
+    // ease toward the idle (or shake-boosted) speed, keeping its direction
+    const ns = s + (target - s) * (1 - Math.exp(-dt * SPOT_SPEED_EASE));
+    vx *= ns / s; vy *= ns / s;
+  }
+
+  px += vx * dt; py += vy * dt;
+  const keep = tilting ? SPOT_TILT_BOUNCE : 1;
+  if (px < minX) { px = minX; vx = Math.abs(vx) * keep; }
+  else if (px > maxX) { px = maxX; vx = -Math.abs(vx) * keep; }
+  if (py < minY) { py = minY; vy = Math.abs(vy) * keep; }
+  else if (py > maxY) { py = maxY; vy = -Math.abs(vy) * keep; }
+}
+
+/* ---------- Eyes: glance around on their own, follow the tilt ---------- */
+
+let gaze = 0;                 // -1 = looking toward the left of the image, +1 = toward the right
+let gazeIdle = 0, nextGlance = 1.5, glanceSide = 1;
+
+function updateGaze(t, dt) {
+  // neutral: glance from side to side every so often
+  if (t >= nextGlance) {
+    glanceSide = -glanceSide;
+    gazeIdle = Math.random() < EYE_IDLE_CENTER_CHANCE ? 0 : glanceSide * (0.55 + Math.random() * 0.45);
+    nextGlance = t + EYE_IDLE_HOLD[0] + Math.random() * (EYE_IDLE_HOLD[1] - EYE_IDLE_HOLD[0]);
+  }
+  // sideways tilt takes over from the idle glances
+  const a = clamp((Math.abs(cx) - EYE_TILT_DEADZONE) / EYE_TILT_BLEND, 0, 1);
+  const tiltGaze = clamp(cx * EYE_TILT_GAIN * EYE_DIR, -1, 1);
+  const goal = gazeIdle * (1 - a) + tiltGaze * a;
+  gaze += (goal - gaze) * (1 - Math.exp(-dt * EYE_FOLLOW));
+}
+
+// Slide each eye window's artwork, never past the edges of its own eye
+function eyeOffset(l) {
+  const e = l.eye;
+  return clamp(EYE_SWING * gaze, e.min, e.max);    // 0 = the drawn (centred) position; each eye is held inside its own range
+}
+function applyEyes() {
+  const W = stage.clientWidth;
+  for (const l of eyeLayerList) {
+    const k = (W + 2 * l.shift) / W || 1;     // the layer is slightly larger than the stage, so scale the travel to match
+    l.inner.style.transform = "translate3d(" + (eyeOffset(l) * W * k) + "px,0,0)";
+  }
+}
+new ResizeObserver(() => { if (reduceMotion) applyEyes(); }).observe(stage);   // with reduced motion: hold the eyes at rest
+
+/* ---------- Movement + pop ---------- */
+
+function frame(now) {
+  const t = now / 1000;
+  const dt = lastT == null ? 0 : Math.min(t - lastT, 0.05);
+  lastT = t;
+  const W = stage.clientWidth;
+  cx += (tx - cx) * SMOOTHING;
+  cy += (ty - cy) * SMOOTHING;
+  if (spotReady) updateSpot(dt);
+  updateGaze(t, dt);
+  applyEyes();
+
+  const pp = t - popStart;
+  const popping = pp >= 0 && pp < POP_TIME;
+  const k = popping ? Math.exp(-pp * 9) : 0;
+
+  for (const l of layers) {
+    let dx = -cx * l.shift * DIRECTION;
+    let dy = -cy * l.shift * DIRECTION;
+    if (l.spot && spotReady) {
+      const k = (W + 2 * l.shift) / W;          // the layer is slightly larger than the stage, so scale the travel to match
+      dx += (px - natX) * W * k;
+      dy += (py - natY) * W * k;
+    }
+    let rot = 0, sc = 1;
+    if ((l.faces || l.eye) && popping) {
+      sc = 1 + POP_SCALE * k;
+      rot = Math.sin(pp * 40) * POP_TILT * k;
+    }
+    l.el.style.transform = "translate3d(" + dx + "px," + dy + "px,0) rotate(" + rot + "deg) scale(" + sc + ")";
+  }
+  requestAnimationFrame(frame);
+}
+if (!reduceMotion) requestAnimationFrame(frame);
+
+/* ---------- Input: mouse, tilt, shake ---------- */
+
+// Mouse position -> parallax
+stage.addEventListener("pointermove", e => {
+  if (e.pointerType === "touch" || reduceMotion) return;
+  const r = stage.getBoundingClientRect();
+  tx = clamp(((e.clientX - r.left) / r.width) * 2 - 1, -1, 1);
+  ty = clamp(((e.clientY - r.top) / r.height) * 2 - 1, -1, 1);
+});
+stage.addEventListener("pointerleave", e => {
+  if (e.pointerType !== "touch") { tx = 0; ty = 0; }
+});
+
+// Mouse shake: count quick back-and-forth strokes on either axis
+const mouseAxes = {
+  x: { dir: 0, ext: 0 },
+  y: { dir: 0, ext: 0 }
+};
+let strokes = [];           // timestamps (seconds) of recent strokes
+
+function trackAxis(a, v, t) {
+  if (a.dir === 0) { a.dir = 1; a.ext = v; return; }
+  // keep following the extreme point in the current direction
+  if ((v - a.ext) * a.dir > 0) { a.ext = v; return; }
+  // moved the other way far enough = a new stroke
+  if (Math.abs(v - a.ext) >= MOUSE_MIN_STROKE) {
+    a.dir = -a.dir;
+    a.ext = v;
+    strokes.push(t);
+    addShake(0.22);
+  }
+}
+
+window.addEventListener("pointermove", e => {
+  if (e.pointerType !== "mouse" || reduceMotion) return;
+  const t = performance.now() / 1000;
+  trackAxis(mouseAxes.x, e.clientX, t);
+  trackAxis(mouseAxes.y, e.clientY, t);
+  strokes = strokes.filter(s => t - s <= MOUSE_WINDOW);
+  if (strokes.length >= MOUSE_STROKES) {
+    strokes = [];
+    nextFace();
+  }
+});
+
+// Phone tilt
+let base = null;
+let gotSensor = false;
+
+function onOrientation(e) {
+  if (e.gamma == null || e.beta == null || reduceMotion) return;
+  gotSensor = true;
+  if (!base) base = { g: e.gamma, b: e.beta };
+  tx = clamp((e.gamma - base.g) / TILT_RANGE, -1, 1);
+  ty = clamp((e.beta - base.b) / TILT_RANGE, -1, 1);
+}
+
+// Phone shake: count sharp jolts in a short window
+let lastAcc = null;
+let spikes = [];
+
+function onMotion(e) {
+  const a = e.accelerationIncludingGravity;
+  if (!a || a.x == null) return;
+  gotMotion = true;
+  if (lastAcc) {
+    const jolt = Math.abs(a.x - lastAcc.x) + Math.abs(a.y - lastAcc.y) + Math.abs(a.z - lastAcc.z);
+    const t = performance.now() / 1000;
+    if (jolt > SHAKE_THRESHOLD) { spikes.push(t); addShake(0.3); }
+    spikes = spikes.filter(s => t - s <= SHAKE_WINDOW);
+    if (spikes.length >= SHAKE_SPIKES) {
+      spikes = [];
+      nextFace();
+    }
+  }
+  lastAcc = { x: a.x, y: a.y, z: a.z };
+}
+let gotMotion = false;
+
+function showHint(text, ms) {
+  hint.textContent = text;
+  hint.classList.remove("hidden", "fade");
+  clearTimeout(showHint.t);
+  showHint.t = setTimeout(() => {
+    hint.classList.add("fade");
+    setTimeout(() => hint.classList.add("hidden"), 700);
+  }, ms);
+}
+
+function startSensors() {
+  window.addEventListener("deviceorientation", onOrientation);
+  window.addEventListener("devicemotion", onMotion);
+  enableBtn.classList.add("hidden");
+  showHint("Shake to change the face and speed up the light. Tilt to steer it. Tap for music, double-tap to reset. Hold for tour dates. Each face has its own song.", 6500);
+  setTimeout(() => {
+    if (!gotSensor && !gotMotion) showHint("No motion sensor found. Wiggle your mouse over the image.", 4000);
+  }, 1500);
+}
+
+/* ---------- Music + taps ---------- */
+
+const audio = new Audio();
+audio.preload = "metadata";
+audio.loop = AUDIO_LOOP;
+audio.volume = AUDIO_VOLUME;
+let audioFailed = false;
+let track = TRACKS[0];
+let clipEnd = Infinity;
+
+audio.addEventListener("error", () => {
+  audioFailed = true;
+  showHint("Couldn't load \"" + track.src + "\". Check the file is in the same folder as this page and the name matches.", 6000);
+});
+audio.addEventListener("loadedmetadata", () => rewind());   // jump to the clip's start once the file is ready
+
+function rewind() { try { audio.currentTime = track.start || 0; } catch (e) {} audio.volume = AUDIO_VOLUME; }
+
+// Point the player at the song for a face (and optionally keep playing, if the music was on)
+function loadTrack(i, autoplay) {
+  track = TRACKS[i % TRACKS.length];
+  clipEnd = track.length > 0 ? (track.start || 0) + track.length : Infinity;
+  audioFailed = false;
+  audio.pause();
+  audio.src = encodeURI(track.src);
+  rewind();
+  if (autoplay) {
+    const p = audio.play();
+    if (p && p.catch) p.catch(() => showHint("Tap to play the new song", 2500));   // some phones need a tap first
+  }
+}
+loadTrack(0, false);
+
+// A clip ends at start + length even though the file is longer: fade out, then stop (or loop)
+setInterval(() => {
+  if (audio.paused) return;
+  const t = audio.currentTime;
+  if (t >= clipEnd) {
+    if (AUDIO_LOOP) { rewind(); }
+    else { audio.pause(); rewind(); showHint("\u21BA Done. Tap to play again", 1500); }
+    return;
+  }
+  const fade = track.fade || 0;
+  if (fade > 0 && clipEnd - t < fade) audio.volume = AUDIO_VOLUME * Math.max(0, (clipEnd - t) / fade);
+  else if (audio.volume !== AUDIO_VOLUME) audio.volume = AUDIO_VOLUME;
+}, 80);
+
+audio.addEventListener("ended", () => {       // a full-length song reaching its end
+  if (AUDIO_LOOP) { rewind(); audio.play().catch(() => {}); } else rewind();
+});
+
+function togglePlay() {
+  if (audio.paused) {
+    if (audio.currentTime < (track.start || 0) || audio.currentTime >= clipEnd) rewind();   // always begin inside the clip
+    audio.volume = AUDIO_VOLUME;
+    const p = audio.play();
+    if (p && p.catch) p.catch(() => { if (!audioFailed) showHint("Couldn't play the music on this device.", 3500); });
+    showHint("\u25B6 Playing", 900);
+  } else {
+    audio.pause();
+    showHint("\u23F8 Paused", 900);
+  }
+}
+
+function resetAudio() {
+  audio.pause();
+  rewind();
+  if (DOUBLE_TAP_RESTARTS) {
+    const p = audio.play();
+    if (p && p.catch) p.catch(() => {});
+    showHint("\u21BA Restarted", 1000);
+  } else {
+    showHint("\u21BA Reset", 1000);
+  }
+}
+
+
+/* ---------- Encore ticket mockup (opens from a stop on the 2027 tab) ---------- */
+
+const bkRoot = document.getElementById("booking");
+let bookingOpen = false;
+let bk = null;                 // the booking in progress
+let bkTick = null;
+const bkBought = {};           // seats "bought" during this visit, so they show as taken afterwards
+
+function bkEl(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+// Same text always gives the same "random" numbers, so a show always has the same sold-out sections
+function bkRand(str) {
+  let hh = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) { hh = Math.imul(hh ^ str.charCodeAt(i), 3432918353); hh = (hh << 13) | (hh >>> 19); }
+  let a = (Math.imul(hh ^ (hh >>> 16), 2246822507) ^ Math.imul(hh ^ (hh >>> 13), 3266489909)) >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const bkRowName = i => String.fromCharCode(65 + i);
+const ZONE_BY_ID = {};
+ZONES.forEach(z => { ZONE_BY_ID[z.id] = z; });
+function bkNice(x) { const m = Math.pow(10, Math.max(0, Math.floor(Math.log10(x)) - 1)); return Math.round(x / m) * m; }
+const bkLocal = usd => bkNice(usd * (FX[bk.stop.cc] || 1));         // sample price in the country's currency
+const bkMoney = n => bk.money.format(n);
+const bkSeatSort = (a, b) => a[0] === b[0] ? parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10) : (a[0] < b[0] ? -1 : 1);
+
+function bkSubtotal() { const z = ZONE_BY_ID[bk.zone]; return z ? bkLocal(z.usd) * bk.qty : 0; }
+function bkFee() { return Math.round(bkSubtotal() * BOOKING_FEE_RATE); }
+function bkExtrasTotal() { return EXTRAS.reduce((a, x) => a + (bk.extras[x.id] ? bkLocal(x.usd) * (x.per === "ticket" ? bk.qty : 1) : 0), 0); }
+const bkGrand = () => bkSubtotal() + bkFee() + bkExtrasTotal();
+
+function openBooking(stop) {
+  const nights = stopNights(stop);
+  const today = todayISO();
+  const first = nights.find(n => n >= today) || null;
+  bk = {
+    stop, nights, night: nights.filter(n => n >= today).length === 1 ? first : null,
+    money: new Intl.NumberFormat("en", { style: "currency", currency: stop.cc, maximumFractionDigits: 0 }),
+    qty: 2, zone: null, seats: [], seatEls: {}, zones: {}, zoneEls: {}, extras: {},
+    step: 1, holdEnd: null, paying: false, pay: PAYMENT_METHODS[0].id, code: "", msg: "", zoneMsg: ""
+  };
+  bookingOpen = true;
+  bkRoot.classList.add("open");
+  bkRoot.setAttribute("aria-hidden", "false");
+  clearInterval(bkTick);
+  bkTick = setInterval(bkUpdateHold, 500);
+  bkRender();
+  document.getElementById("bkBack").focus({ preventScroll: true });
+}
+function closeBooking() {
+  bookingOpen = false;
+  bk = null;
+  clearInterval(bkTick);
+  bkRoot.classList.remove("open");
+  bkRoot.setAttribute("aria-hidden", "true");
+}
+function bkGo(step, msg) {
+  bk.step = step;
+  bk.msg = msg || "";
+  if (step === 1) { bk.holdEnd = null; bk.seats = []; bk.zone = null; bk.zoneMsg = ""; }
+  if (step === 2 && !bk.holdEnd) bk.holdEnd = Date.now() + HOLD_MINUTES * 60000;
+  bkRender();
+}
+function bkBack() {
+  if (!bk || bk.paying) return;
+  if (bk.step === 1 || bk.step === 4) closeBooking();
+  else bkGo(bk.step - 1);
+}
+function bkReady() {
+  if (bk.step === 1) return !!bk.night && bk.qty > 0;
+  if (bk.step === 2) { const z = ZONE_BY_ID[bk.zone]; return !!z && (z.ga || bk.seats.length === bk.qty); }
+  return true;
+}
+function bkNext() {
+  if (!bk || bk.paying || !bkReady()) return;
+  if (bk.step === 1) bkGo(2);
+  else if (bk.step === 2) bkGo(3);
+  else if (bk.step === 3) bkPay();
+  else closeBooking();
+}
+document.getElementById("bkBack").addEventListener("click", bkBack);
+document.getElementById("bkClose").addEventListener("click", closeBooking);
+document.getElementById("bkNext").addEventListener("click", bkNext);
+
+function bkRender() {
+  document.getElementById("bkVenue").textContent = bk.stop.venue;
+  document.getElementById("bkWhen").textContent = bk.stop.city + (bk.night ? " \u00B7 " + fmtNights([bk.night]) + ", " + bk.night.slice(0, 4) : "");
+  const names = [["Show", "公演"], ["Seats", "座席"], ["Review", "確認"], ["Done", "完了"]];
+  const steps = document.getElementById("bkSteps");
+  steps.textContent = "";
+  names.forEach((n, i) => {
+    const li = bkEl("li", i + 1 === bk.step ? "on" : (i + 1 < bk.step ? "done" : ""));
+    li.append(bkEl("span", null, n[0]));
+    steps.appendChild(li);
+  });
+  const body = document.getElementById("bkBody");
+  body.textContent = "";
+  [bkStepShow, bkStepSeats, bkStepReview, bkStepDone][bk.step - 1](body);
+  document.getElementById("bkBack").hidden = bk.step === 4;
+  bkFooter();
+  bkRoot.scrollTop = 0;
+  bkUpdateHold();
+}
+
+function bkFooter() {
+  const btn = document.getElementById("bkNext");
+  const sumBox = document.querySelector("#bkFoot .bk-sum");
+  sumBox.hidden = bk.step === 4;
+  const n = bk.qty, tix = n + (n === 1 ? " ticket" : " tickets");
+  let total = "", info = tix;
+  if (bk.step === 1) {
+    const cheapest = Math.min.apply(null, ZONES.map(z => z.usd));
+    total = "from " + bkMoney(bkLocal(cheapest) * n);
+  } else if (bk.step === 2) {
+    const z = ZONE_BY_ID[bk.zone];
+    total = z ? bkMoney(bkSubtotal()) : "\u2014";
+    info = z ? (z.ga ? tix + " \u00B7 " + z.label : bk.seats.length + "/" + n + " seats \u00B7 " + z.label) : tix;
+  } else { total = bkMoney(bkGrand()); }
+  document.getElementById("bkSumTotal").textContent = total;
+  document.getElementById("bkSumInfo").textContent = info;
+  btn.disabled = !bkReady() || bk.paying;
+  if (bk.step === 1) btn.textContent = "Choose seats \u2192";
+  else if (bk.step === 2) btn.textContent = "Review \u2192";
+  else if (bk.step === 3) btn.textContent = bk.paying ? "Processing\u2026" : "Pay " + bkMoney(bkGrand()) + " (demo)";
+  else btn.textContent = "Done";
+}
+
+function bkUpdateHold() {
+  if (!bk || !bk.holdEnd || bk.paying || bk.step < 2 || bk.step > 3) return;
+  const left = bk.holdEnd - Date.now();
+  if (left <= 0) {
+    bk.seats = []; bk.zone = null; bk.holdEnd = null;
+    bkGo(2, "Your hold expired, so please choose again. / 確保時間が過ぎました。もう一度お選びください。");
+    return;
+  }
+  const el = document.querySelector("#bkBody .bk-hold");
+  if (!el) return;
+  const clock = String(Math.floor(left / 60000)).padStart(2, "0") + ":" + String(Math.floor(left / 1000) % 60).padStart(2, "0");
+  el.textContent = "Held for you: " + clock + "  /  確保中 残り " + clock;
+  el.classList.toggle("low", left < 60000);
+}
+
+/* --- step 1: night + how many --- */
+function bkStepShow(body) {
+  body.appendChild(bkEl("div", "bk-demo", "Fan concept: this 2027 encore tour is imaginary. Nothing is sold, charged or booked. / ファンによるコンセプトです。実際の販売・決済はありません。"));
+  const today = todayISO();
+  if (bk.nights.length > 1) {
+    body.appendChild(bkEl("h3", "bk-h", "Choose a night"));
+    const radios = [];
+    bk.nights.forEach(n => {
+      const past = n < today;
+      const b = bkEl("button", "bk-opt"); b.type = "button"; b.setAttribute("role", "radio"); b.disabled = past;
+      const main = bkEl("span", "main", fmtLong(n)); main.appendChild(bkEl("small", null, "Doors " + DOORS_TIME + " \u00B7 Show " + SHOW_TIME));
+      b.append(bkEl("span", "dot"), main);
+      b.setAttribute("aria-checked", n === bk.night ? "true" : "false");
+      b.addEventListener("click", () => { bk.night = n; radios.forEach(([iso, el]) => el.setAttribute("aria-checked", iso === n ? "true" : "false")); bkFooter(); bkRender2(); });
+      radios.push([n, b]);
+      body.appendChild(b);
+    });
+  } else {
+    body.appendChild(bkEl("h3", "bk-h", "Your night"));
+    const b = bkEl("div", "bk-card");
+    b.append(bkKv("Date", fmtLong(bk.nights[0])), bkKv("Doors", DOORS_TIME), bkKv("Show", SHOW_TIME));
+    body.appendChild(b);
+  }
+  body.appendChild(bkEl("h3", "bk-h", "How many tickets?"));
+  const st = bkEl("div", "bk-stepper");
+  const minus = bkEl("button", "bk-step-btn", "\u2212"); minus.type = "button"; minus.setAttribute("aria-label", "Fewer tickets");
+  const count = bkEl("span", "bk-count", String(bk.qty)); count.setAttribute("aria-live", "polite");
+  const plus = bkEl("button", "bk-step-btn", "+"); plus.type = "button"; plus.setAttribute("aria-label", "More tickets");
+  const refresh = () => { count.textContent = bk.qty; minus.disabled = bk.qty <= 1; plus.disabled = bk.qty >= MAX_TICKETS; bkFooter(); };
+  minus.addEventListener("click", () => { if (bk.qty > 1) { bk.qty--; refresh(); } });
+  plus.addEventListener("click", () => { if (bk.qty < MAX_TICKETS) { bk.qty++; refresh(); } });
+  st.append(minus, count, plus);
+  body.append(st, bkEl("p", "note", "Up to " + MAX_TICKETS + " tickets per booking. / 1回のお申し込みは最大" + MAX_TICKETS + "枚まで。"));
+  refresh();
+}
+function bkRender2() { document.getElementById("bkWhen").textContent = bk.stop.city + " \u00B7 " + fmtNights([bk.night]) + ", " + bk.night.slice(0, 4); }
+
+/* --- step 2: seating plan --- */
+function bkComputeZones() {
+  bk.key = bk.stop.id + "|" + bk.night;
+  bk.zones = {};
+  ZONES.forEach(z => {
+    const rnd = bkRand(bk.key + "|" + z.id + "|status");
+    const r = rnd();
+    let status = "ok", left = Infinity;
+    const sold = new Set();
+    if (z.ga) {
+      if (r < 0.10) status = "sold";
+      else if (r < 0.28) { status = "low"; left = 2 + Math.floor(rnd() * 8); }
+      if (status !== "sold" && left < bk.qty) status = "short";
+    } else {
+      const sr = bkRand(bk.key + "|" + z.id + "|seats");
+      const ratio = r < 0.10 ? 1 : (r < 0.28 ? 0.82 : 0.35);
+      (bkBought[bk.key + "|" + z.id] || []).forEach(id => sold.add(id));
+      for (let ri = 0; ri < z.rows; ri++) for (let c = 1; c <= z.cols; c++) if (sr() < ratio) sold.add(bkRowName(ri) + c);
+      const free = z.rows * z.cols - sold.size;
+      status = free <= 0 ? "sold" : (free < bk.qty ? "short" : (r < 0.28 ? "low" : "ok"));
+      left = free;
+    }
+    bk.zones[z.id] = { status, left, sold };
+  });
+}
+const bkSvg = (tag, attrs) => { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); Object.keys(attrs || {}).forEach(k => e.setAttribute(k, attrs[k])); return e; };
+
+function bkStepSeats(body) {
+  bkComputeZones();
+  if (bk.msg) body.appendChild(bkEl("div", "bk-msg", bk.msg));
+  body.appendChild(bkEl("div", "bk-hold"));
+  body.appendChild(bkEl("h3", "bk-h", "Choose where you'll be"));
+  body.appendChild(bkEl("p", "note", "Tap a section on the map. Standing areas have no assigned seats. / マップのエリアをタップしてください。"));
+
+  const svg = bkSvg("svg", { viewBox: "0 0 360 280", class: "venuemap", role: "group", "aria-label": "Seating plan of " + bk.stop.venue });
+  svg.appendChild(bkSvg("rect", { x: 125, y: 8, width: 110, height: 30, rx: 4, class: "stagebox" }));
+  const sl = bkSvg("text", { x: 180, y: 23, class: "stagelbl" }); sl.textContent = "STAGE"; svg.appendChild(sl);
+  bk.zoneEls = {};
+  ZONES.forEach(z => {
+    const st = bk.zones[z.id].status;
+    const g = bkSvg("g", { class: "zone " + z.tier + (st === "sold" || st === "short" ? " na" : ""), tabindex: "0", role: "button" });
+    const what = st === "sold" ? "sold out" : (st === "short" ? "not enough left for " + bk.qty : (st === "low" ? "few left, " : "") + bkMoney(bkLocal(z.usd)) + " each");
+    g.setAttribute("aria-label", z.label + ", " + TIER_NAMES[z.tier] + ", " + what);
+    g.appendChild(bkSvg("rect", { x: z.x, y: z.y, width: z.w, height: z.h, rx: 4 }));
+    const t = bkSvg("text", { x: z.x + z.w / 2, y: z.y + z.h / 2 });
+    t.textContent = z.ga ? z.label : z.id;
+    g.appendChild(t);
+    g.addEventListener("click", () => bkPickZone(z.id));
+    g.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); bkPickZone(z.id); } });
+    bk.zoneEls[z.id] = g;
+    svg.appendChild(g);
+  });
+  body.appendChild(svg);
+
+  const key = bkEl("div", "tierkey");
+  Object.keys(TIER_NAMES).forEach(t => {
+    const prices = ZONES.filter(z => z.tier === t).map(z => bkLocal(z.usd));
+    const lo = Math.min.apply(null, prices), hi = Math.max.apply(null, prices);
+    const s = bkEl("span"); const sw = bkEl("i"); sw.style.background = TIER_COLORS[t];
+    s.append(sw, document.createTextNode(TIER_NAMES[t] + " " + (lo === hi ? bkMoney(lo) : bkMoney(lo) + "\u2013" + bkMoney(hi))));
+    key.appendChild(s);
+  });
+  body.appendChild(key);
+
+  const panel = bkEl("div", "panel"); panel.id = "bkPanel"; panel.setAttribute("aria-live", "polite");
+  body.appendChild(panel);
+  bkPaintMap();
+  bkPaintPanel();
+}
+function bkPickZone(id) {
+  const info = bk.zones[id];
+  if (info.status === "sold") { bk.zoneMsg = ZONE_BY_ID[id].label + " is sold out."; bk.zone = null; bk.seats = []; }
+  else if (info.status === "short") { bk.zoneMsg = "Only " + info.left + " left in " + ZONE_BY_ID[id].label + ", not enough for " + bk.qty + " tickets."; bk.zone = null; bk.seats = []; }
+  else { bk.zoneMsg = ""; if (bk.zone !== id) { bk.zone = id; bk.seats = []; } }
+  bkPaintMap(); bkPaintPanel(); bkFooter();
+}
+function bkPaintMap() {
+  Object.keys(bk.zoneEls).forEach(id => {
+    const on = id === bk.zone;
+    bk.zoneEls[id].classList.toggle("sel", on);
+    bk.zoneEls[id].setAttribute("aria-pressed", on ? "true" : "false");
+  });
+}
+function bkPaintPanel() {
+  const panel = document.getElementById("bkPanel");
+  if (!panel) return;
+  panel.textContent = "";
+  const z = ZONE_BY_ID[bk.zone];
+  if (!z) {
+    panel.appendChild(bkEl("div", "ps", bk.zoneMsg || "No section chosen yet. / まだエリアが選ばれていません。"));
+    return;
+  }
+  const info = bk.zones[z.id];
+  panel.appendChild(bkEl("div", "pt", z.label + (z.ga ? "" : " \u00B7 " + TIER_NAMES[z.tier])));
+  if (z.ga) panel.appendChild(bkEl("div", "ps", TIER_NAMES[z.tier] + ". No assigned seats, first come first served. / 立ち見・指定席なし"));
+  const pp = bkEl("div", "pp", bkMoney(bkLocal(z.usd)) + " each \u00B7 " + bk.qty + " \u00D7 = " + bkMoney(bkSubtotal()));
+  if (info.status === "low") pp.appendChild(bkEl("span", "low", z.ga ? "  \u00B7 Few left" : "  \u00B7 Selling fast"));
+  panel.appendChild(pp);
+  if (z.ga) return;
+
+  const best = bkEl("button", "bk-ghost", "Best available / おまかせ"); best.type = "button"; best.style.marginTop = "12px";
+  best.addEventListener("click", () => { bk.seats = bkBestSeats(z, bk.qty, info.sold); bkPaintSeats(); bkFooter(); });
+  panel.appendChild(best);
+  panel.appendChild(bkEl("div", "rowhint", "FRONT \u2191 \u00B7 ROW A"));
+  const grid = bkEl("div", "seatgrid");
+  grid.style.gridTemplateColumns = "repeat(" + z.cols + ", minmax(0, 1fr))";
+  bk.seatEls = {};
+  for (let ri = 0; ri < z.rows; ri++) for (let c = 1; c <= z.cols; c++) {
+    const id = bkRowName(ri) + c;
+    const b = bkEl("button", "seat"); b.type = "button";
+    if (info.sold.has(id)) { b.disabled = true; b.setAttribute("aria-label", "Row " + bkRowName(ri) + ", seat " + c + ", taken"); }
+    else {
+      b.setAttribute("aria-label", "Row " + bkRowName(ri) + ", seat " + c + ", available");
+      b.setAttribute("aria-pressed", "false");
+      b.addEventListener("click", () => bkToggleSeat(id));
+    }
+    bk.seatEls[id] = b;
+    grid.appendChild(b);
+  }
+  panel.appendChild(grid);
+  const picked = bkEl("div", "bk-picked"); picked.id = "bkPicked";
+  panel.appendChild(picked);
+  bkPaintSeats();
+}
+function bkToggleSeat(id) {
+  const i = bk.seats.indexOf(id);
+  if (i >= 0) bk.seats.splice(i, 1);
+  else { if (bk.seats.length >= bk.qty) bk.seats.shift(); bk.seats.push(id); }   // one too many drops the oldest pick
+  bkPaintSeats();
+  bkFooter();
+}
+function bkPaintSeats() {
+  Object.keys(bk.seatEls).forEach(id => { const el = bk.seatEls[id]; if (!el.disabled) el.setAttribute("aria-pressed", bk.seats.includes(id) ? "true" : "false"); });
+  const p = document.getElementById("bkPicked");
+  if (p) p.textContent = bk.seats.length ? "Your seats: " + bk.seats.slice().sort(bkSeatSort).join(", ") : "Choose " + bk.qty + (bk.qty === 1 ? " seat" : " seats");
+}
+// A group together near the middle of the section, a few rows back
+function bkBestSeats(z, n, sold) {
+  const mid = Math.floor(z.rows * 0.4), centre = (z.cols + 1) / 2;
+  const order = [...Array(z.rows).keys()].sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid));
+  for (const ri of order) {
+    const starts = [];
+    for (let s = 1; s + n - 1 <= z.cols; s++) starts.push(s);
+    starts.sort((a, b) => Math.abs(a + (n - 1) / 2 - centre) - Math.abs(b + (n - 1) / 2 - centre));
+    for (const s of starts) {
+      const ids = [];
+      for (let k = 0; k < n; k++) ids.push(bkRowName(ri) + (s + k));
+      if (ids.every(id => !sold.has(id))) return ids;
+    }
+  }
+  const free = [];                                       // no group fits: any free seats
+  for (let ri = 0; ri < z.rows; ri++) for (let c = 1; c <= z.cols; c++) if (!sold.has(bkRowName(ri) + c)) free.push(bkRowName(ri) + c);
+  return free.slice(0, n);
+}
+
+/* --- step 3: extras, review, pay (pretend) --- */
+function bkKv(label, value, cls) {
+  const r = bkEl("div", "bk-kv" + (cls ? " " + cls : ""));
+  r.append(bkEl("span", null, label), bkEl("span", null, value));
+  return r;
+}
+function bkSeatText() {
+  const z = ZONE_BY_ID[bk.zone];
+  return z.ga ? z.label + " \u00B7 standing" : z.label + " \u00B7 " + bk.seats.slice().sort(bkSeatSort).join(", ");
+}
+function bkFillSummary(box) {
+  box.textContent = "";
+  const z = ZONE_BY_ID[bk.zone];
+  box.appendChild(bkEl("h4", null, "Order summary"));
+  box.append(
+    bkKv("Venue", bk.stop.venue),
+    bkKv("City", bk.stop.city),
+    bkKv("Date", fmtLong(bk.night)),
+    bkKv("Doors / show", DOORS_TIME + " / " + SHOW_TIME),
+    bkKv("Where", bkSeatText()),
+    bkKv(bk.qty + " \u00D7 " + (z.ga ? "Standing" : "Reserved seat"), bkMoney(bkSubtotal())),
+    bkKv("Service fee", bkMoney(bkFee()))
+  );
+  EXTRAS.forEach(x => {
+    if (bk.extras[x.id]) box.appendChild(bkKv(x.en + (x.per === "ticket" ? " \u00D7 " + bk.qty : ""), bkMoney(bkLocal(x.usd) * (x.per === "ticket" ? bk.qty : 1))));
+  });
+  box.appendChild(bkKv("Total", bkMoney(bkGrand()), "total"));
+}
+function bkStepReview(body) {
+  body.appendChild(bkEl("div", "bk-hold"));
+  body.appendChild(bkEl("h3", "bk-h", "Review your order"));
+  const sum = bkEl("div", "bk-card");
+  bkFillSummary(sum);
+  body.appendChild(sum);
+
+  const ex = bkEl("div", "bk-card");
+  ex.appendChild(bkEl("h4", null, "Extras (optional)"));
+  EXTRAS.forEach(x => {
+    const b = bkEl("button", "bk-opt"); b.type = "button"; b.setAttribute("role", "switch");
+    const main = bkEl("span", "main", x.en); main.appendChild(bkEl("small", null, x.ja + (x.per === "ticket" ? " \u00B7 per ticket" : "")));
+    b.append(bkEl("span", "box"), main, bkEl("span", "amt", "+" + bkMoney(bkLocal(x.usd))));
+    b.setAttribute("aria-checked", bk.extras[x.id] ? "true" : "false");
+    b.addEventListener("click", () => {
+      bk.extras[x.id] = !bk.extras[x.id];
+      b.setAttribute("aria-checked", bk.extras[x.id] ? "true" : "false");
+      bkFillSummary(sum);
+      bkFooter();
+    });
+    ex.appendChild(b);
+  });
+  body.appendChild(ex);
+
+  const pay = bkEl("div", "bk-card");
+  pay.appendChild(bkEl("h4", null, "Payment method"));
+  const radios = [];
+  PAYMENT_METHODS.forEach(m => {
+    const b = bkEl("button", "bk-opt"); b.type = "button"; b.setAttribute("role", "radio");
+    const main = bkEl("span", "main", m.en); main.appendChild(bkEl("small", null, m.ja));
+    b.append(bkEl("span", "dot"), main);
+    b.setAttribute("aria-checked", m.id === bk.pay ? "true" : "false");
+    b.addEventListener("click", () => { bk.pay = m.id; radios.forEach(([id, el]) => el.setAttribute("aria-checked", id === bk.pay ? "true" : "false")); });
+    radios.push([m.id, b]);
+    pay.appendChild(b);
+  });
+  body.appendChild(pay);
+  body.appendChild(bkEl("div", "bk-demo", "Demo only: nothing is charged and no payment details are collected. / デモです。実際の請求や決済情報の入力はありません。"));
+}
+function bkPay() {
+  if (bk.paying) return;
+  const mine = bk;
+  bk.paying = true;
+  bkFooter();
+  setTimeout(() => {
+    if (bk !== mine) return;                             // closed while "processing": nothing was booked
+    const z = ZONE_BY_ID[mine.zone];
+    const digits = String(Math.floor(bkRand(mine.key + Date.now())() * 1e6)).padStart(6, "0");
+    mine.code = "AHTD-" + digits;
+    if (!z.ga) (bkBought[mine.key + "|" + z.id] = bkBought[mine.key + "|" + z.id] || []).push(...mine.seats);
+    mine.holdEnd = null;
+    mine.paying = false;
+    bkGo(4);
+  }, 1400);
+}
+
+/* --- step 4: your (pretend) ticket --- */
+function bkQR(code) {
+  const rnd = bkRand(code), N = 21;
+  const svg = bkSvg("svg", { viewBox: "0 0 " + N + " " + N, role: "img", "aria-label": "Sample QR code (not scannable)" });
+  const rect = (x, y, w, h, fill) => svg.appendChild(bkSvg("rect", { x, y, width: w, height: h, fill }));
+  rect(0, 0, N, N, "#fff");
+  const finder = (ox, oy) => { rect(ox, oy, 7, 7, "#000"); rect(ox + 1, oy + 1, 5, 5, "#fff"); rect(ox + 2, oy + 2, 3, 3, "#000"); };
+  finder(0, 0); finder(N - 7, 0); finder(0, N - 7);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    if ((x < 8 && y < 8) || (x >= N - 8 && y < 8) || (x < 8 && y >= N - 8)) continue;
+    if (rnd() < 0.5) rect(x, y, 1, 1, "#000");
+  }
+  return svg;
+}
+function bkStepDone(body) {
+  body.append(bkEl("div", "bk-ok", "\u2713 Booked (demo)"), bkEl("div", "bk-okja", "購入完了(デモ)"));
+  const t = bkEl("div", "bk-ticket");
+  const info = bkEl("div");
+  info.append(bkEl("div", "mv", ENCORE_NAME), bkEl("div", "mvja", "The Weeknd \u00B7 fan concept"));
+  info.append(
+    bkKv("Venue", bk.stop.venue),
+    bkKv("City", bk.stop.city),
+    bkKv("Date", fmtLong(bk.night)),
+    bkKv("Doors / show", DOORS_TIME + " / " + SHOW_TIME),
+    bkKv("Where", bkSeatText()),
+    bkKv(bk.qty + (bk.qty === 1 ? " ticket" : " tickets"), bkMoney(bkGrand()))
+  );
+  const codeRow = bkEl("div", "code");
+  codeRow.append(bkEl("span", null, "Booking code"), bkEl("b", null, bk.code));
+  t.append(info, bkQR(bk.code), codeRow);
+  body.append(t, bkEl("p", "note", "This is a demo ticket for an imaginary tour. No payment was made and nothing was booked. / 架空のツアーのデモ用チケットです。実際の購入・予約は行われていません。"));
+}
+
+/* ---------- Tour schedule sheet (opened by a long press) ---------- */
+
+const sheet = document.getElementById("sheet");
+let sheetOpen = false, sheetTimer = null;
+
+function todayISO() {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: TOUR_TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const get = type => (parts.find(p => p.type === type) || {}).value;
+  return get("year") + "-" + get("month") + "-" + get("day");
+}
+
+let sheetTab = "encore";                 // "encore" (2027 concept) or "y2026" (the real 2026 tour)
+
+// ---- dates ----
+const bkIso = iso => new Date(iso + "T00:00:00Z");
+function shiftISO(iso, days) { const d = bkIso(iso); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); }
+function stopNights(st) { return st.encore || st.nights.map(n => shiftISO(n, ENCORE_SHIFT_DAYS)); }
+// ["2027-07-07","2027-07-09","2027-07-10"] -> "Jul 7, 9\u201310"
+function fmtNights(list) {
+  const mon = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" });
+  const runs = [];
+  list.forEach((iso, i) => {
+    if (i && (bkIso(iso) - bkIso(list[i - 1])) / 86400000 === 1) runs[runs.length - 1].push(iso);
+    else runs.push([iso]);
+  });
+  let lastMon = "";
+  return runs.map(r => {
+    const a = bkIso(r[0]), b = bkIso(r[r.length - 1]);
+    const ma = mon.format(a), mb = mon.format(b);
+    let t = (ma === lastMon ? "" : ma + " ") + a.getUTCDate();
+    if (r.length > 1) t += "\u2013" + (mb === ma ? "" : mb + " ") + b.getUTCDate();
+    lastMon = mb;
+    return t;
+  }).join(", ");
+}
+const fmtLong = iso => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric", year: "numeric" }).format(bkIso(iso));
+
+function renderSheet() {
+  const today = todayISO();
+  const encore = sheetTab === "encore";
+  document.getElementById("sheetSub").textContent = encore ? "2027 encore \u00B7 fan concept" : "2026 stadium dates";
+  document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === sheetTab ? "true" : "false"));
+  const legsBox = document.getElementById("legs");
+  legsBox.textContent = "";
+  let nextMarked = false, upcoming = 0, total = 0, shows = 0;
+  TOUR_LEGS.forEach(leg => {
+    const h = document.createElement("h3");
+    h.textContent = leg.name;
+    legsBox.appendChild(h);
+    leg.stops.forEach(st => {
+      const nights = encore ? stopNights(st) : st.nights;
+      const done = nights[nights.length - 1] < today;
+      total++; shows += nights.length;
+      if (!done) upcoming++;
+      const canBuy = encore && !done;
+      const row = document.createElement(canBuy ? "button" : "div");
+      row.className = "stop" + (done ? " done" : "");
+      if (canBuy) {
+        row.type = "button";
+        row.setAttribute("aria-label", st.city + ", " + st.venue + ", " + fmtNights(nights) + ". Tickets.");
+        row.addEventListener("click", () => openBooking(st));
+      }
+      if (!done && !nextMarked) { row.classList.add("next"); nextMarked = true; }
+      const d = document.createElement("div"); d.className = "d"; d.textContent = fmtNights(nights);
+      const c = document.createElement("div"); c.className = "c"; c.textContent = st.city;
+      const v = document.createElement("div"); v.className = "v"; v.textContent = st.venue;
+      row.append(d, c, v);
+      if (canBuy) { const go = document.createElement("div"); go.className = "go"; go.textContent = "Tickets \u203A"; row.appendChild(go); }
+      legsBox.appendChild(row);
+    });
+  });
+  const banner = document.getElementById("banner");
+  banner.textContent = "";
+  if (encore) {
+    const b = document.createElement("b"); b.textContent = "Fan concept, not a real announcement. ";
+    banner.append(b, total + " stops and " + shows + " shows at the same stadiums as 2026, with the dates moved forward 52 weeks. Tap a stop to try the ticket mockup.");
+  } else if (upcoming === 0) {
+    const b = document.createElement("b"); b.textContent = "The tour has wrapped. ";
+    banner.append(b, "The last show was " + TOUR_FINALE + ". No further dates are announced.");
+  } else {
+    const b = document.createElement("b"); b.textContent = upcoming + " of " + total + " stops still to come. ";
+    banner.append(b, "Past stops are greyed out.");
+  }
+  document.getElementById("sheetNote").textContent = encore
+    ? "Imagined tour for a concept piece: the dates, prices and seating plans are invented, and no tickets are sold. / ファンによるコンセプトです。日程・料金・座席は架空のもので、チケットの販売はありません。"
+    : "Dates are as listed on the tour's Wikipedia page and may change. Check theweeknd.com/tour for the official word.";
+}
+document.getElementById("tabs").addEventListener("click", e => {
+  const b = e.target.closest("button[data-tab]");
+  if (!b || b.dataset.tab === sheetTab) return;
+  sheetTab = b.dataset.tab;
+  renderSheet();
+  sheet.scrollTop = 0;
+});
+
+function openSheet() {
+  renderSheet();
+  sheet.scrollTop = 0;
+  sheet.classList.add("open");
+  sheet.setAttribute("aria-hidden", "false");
+  sheetOpen = true;
+  clearTimeout(sheetTimer);
+  if (SHEET_AUTOHIDE > 0) sheetTimer = setTimeout(closeSheet, SHEET_AUTOHIDE * 1000);
+}
+function closeSheet() {
+  sheet.classList.remove("open");
+  sheet.setAttribute("aria-hidden", "true");
+  sheetOpen = false;
+  clearTimeout(sheetTimer);
+}
+document.getElementById("sheetClose").addEventListener("click", closeSheet);
+window.addEventListener("keydown", e => { if (e.key === "Escape") { if (bookingOpen) bkBack(); else closeSheet(); } });
+
+// A tap = press and release without moving much. It is detected on release because phones only allow
+// audio to start from a release (not a press).
+// A long press (held LONG_PRESS_TIME without moving) opens the tour schedule instead and is never also a tap.
+let down = null;
+let lastTap = -99;
+let holdTimer = null;
+function cancelHold() { clearTimeout(holdTimer); holdTimer = null; }
+
+stage.addEventListener("pointerdown", e => {
+  if (e.target.closest && e.target.closest(".ui button")) { down = null; return; }
+  down = { x: e.clientX, y: e.clientY, id: e.pointerId, long: false };
+  cancelHold();
+  if (sheetOpen) return;
+  const mine = down;
+  holdTimer = setTimeout(() => {
+    holdTimer = null;
+    if (down !== mine) return;
+    mine.long = true;
+    if (navigator.vibrate) navigator.vibrate(20);
+    openSheet();
+  }, LONG_PRESS_TIME * 1000);
+});
+stage.addEventListener("pointermove", e => {
+  if (down && !down.long && down.id === e.pointerId && Math.hypot(e.clientX - down.x, e.clientY - down.y) > TAP_MAX_MOVE) cancelHold();
+});
+stage.addEventListener("pointercancel", () => { cancelHold(); down = null; });
+stage.addEventListener("contextmenu", e => e.preventDefault());
+stage.addEventListener("pointerup", e => {
+  if (!down || down.id !== e.pointerId) return;
+  cancelHold();
+  const held = down;
+  const moved = Math.hypot(e.clientX - held.x, e.clientY - held.y);
+  down = null;
+  if (held.long) return;                                // it was a long press, not a tap
+  if (moved > TAP_MAX_MOVE) return;
+  if (sheetOpen) { closeSheet(); return; }              // a tap while the schedule is open just closes it
+
+  const now = performance.now() / 1000;
+  if (now - lastTap < DOUBLE_TAP_TIME) {
+    // double-tap: reset the music (the first tap of the pair already toggled it, this undoes that)
+    lastTap = -99;
+    resetAudio();
+    if (DOUBLE_TAP_RECENTERS) base = null;
+    return;
+  }
+  lastTap = now;
+  togglePlay();
+  if (TAP_CYCLES) nextFace();
+});
+
+// iOS needs a tap to grant motion access (one prompt covers both tilt and shake)
+const needsPermission =
+  (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") ||
+  (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function");
+
+const isTouch = matchMedia("(pointer: coarse)").matches;
+
+if (needsPermission) {
+  enableBtn.classList.remove("hidden");
+  enableBtn.addEventListener("click", async () => {
+    try {
+      const req = typeof DeviceMotionEvent.requestPermission === "function"
+        ? DeviceMotionEvent.requestPermission()
+        : DeviceOrientationEvent.requestPermission();
+      const result = await req;
+      if (result === "granted") {
+        startSensors();
+      } else {
+        enableBtn.classList.add("hidden");
+        showHint("Motion access was denied. Reload the page to try again.", 5000);
+      }
+    } catch (err) {
+      showHint("Couldn't enable motion on this page.", 4000);
+    }
+  });
+} else if (isTouch && ("DeviceMotionEvent" in window || "DeviceOrientationEvent" in window)) {
+  startSensors();
+} else {
+  showHint("Wiggle your mouse to change the face and speed up the light. Click for music, double-click to reset. Hold for tour dates.", 5000);
+}
+</script>
+</body>
+</html>
